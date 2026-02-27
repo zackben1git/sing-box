@@ -460,6 +460,24 @@ WARPEOF
     systemctl restart $is_core &>/dev/null
     msg ok "✅ WARP 出口配置完成"
 
+    # open firewall port
+    local node_port=$(ls $is_conf_dir/*.json 2>/dev/null | head -1 | grep -oE '[0-9]+\.json' | grep -oE '[0-9]+')
+    if [[ $node_port ]]; then
+        if type -P firewall-cmd &>/dev/null; then
+            firewall-cmd --permanent --add-port=${node_port}/tcp --add-port=${node_port}/udp &>/dev/null
+            firewall-cmd --reload &>/dev/null
+            msg ok "✅ 防火墙已开放端口 $node_port"
+        elif type -P ufw &>/dev/null; then
+            ufw allow ${node_port}/tcp &>/dev/null
+            ufw allow ${node_port}/udp &>/dev/null
+            msg ok "✅ UFW 已开放端口 $node_port"
+        elif type -P iptables &>/dev/null; then
+            iptables -I INPUT -p tcp --dport $node_port -j ACCEPT
+            iptables -I INPUT -p udp --dport $node_port -j ACCEPT
+            msg ok "✅ iptables 已开放端口 $node_port"
+        fi
+    fi
+
     # remove tmp dir and exit.
     exit_and_del_tmpdir ok
 }
