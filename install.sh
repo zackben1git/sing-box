@@ -432,12 +432,33 @@ main() {
     # create a reality config
     add reality
 
-    # setup cloudflare warp outbound
-    load warp.sh
-    setup_warp
+    # setup cloudflare warp outbound (inline, no external file needed)
+    msg warn "配置 Cloudflare WARP 出口..."
+    local wgcf_bin=$is_core_dir/bin/wgcf
+    local wgcf_dir=$is_core_dir/warp
+    local wgcf_url="https://github.com/ViRb3/wgcf/releases/download/v2.2.26/wgcf_2.2.26_linux_${is_arch}"
+    _wget -q -t 3 "$wgcf_url" -O "$wgcf_bin" && chmod +x "$wgcf_bin" || { msg err "下载 wgcf 失败，跳过 WARP"; exit_and_del_tmpdir ok; }
+    mkdir -p "$wgcf_dir" && cd "$wgcf_dir"
+    "$wgcf_bin" register --accept-tos &>/dev/null
+    "$wgcf_bin" generate &>/dev/null
+    python3 - <<'WARPEOF'
+import json, socket
+conf = open("/etc/sing-box/warp/wgcf-profile.conf").read()
+def get(k):
+    for l in conf.splitlines():
+        if l.strip().startswith(k + " = "): return l.split(" = ",1)[1].strip()
+ep_host, ep_port = get("Endpoint").rsplit(":",1)
+ep_ip = socket.gethostbyname(ep_host)
+c = json.load(open("/etc/sing-box/config.json"))
+c["endpoints"] = [{"tag":"warp","type":"wireguard","address":[a.strip() for a in get("Address").split(",")],"private_key":get("PrivateKey"),"peers":[{"address":ep_ip,"port":int(ep_port),"public_key":get("PublicKey"),"allowed_ips":["0.0.0.0/0","::/0"]}],"mtu":1280}]
+c.setdefault("route",{})["final"] = "warp"
+json.dump(c, open("/etc/sing-box/config.json","w"), indent=2)
+print("WARP写入完成")
+WARPEOF
 
     # restart to apply warp config
     systemctl restart $is_core &>/dev/null
+    msg ok "✅ WARP 出口配置完成"
 
     # remove tmp dir and exit.
     exit_and_del_tmpdir ok
