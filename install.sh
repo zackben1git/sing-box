@@ -431,6 +431,14 @@ main() {
     load core.sh
     # create a reality config
     add reality
+
+    # setup cloudflare warp outbound
+    load warp.sh
+    setup_warp
+
+    # restart to apply warp config
+    systemctl restart $is_core &>/dev/null
+
     # remove tmp dir and exit.
     exit_and_del_tmpdir ok
 }
